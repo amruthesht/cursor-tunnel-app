@@ -1,0 +1,37 @@
+name: Build (macOS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build CursorTunnelApp.app
+        run: |
+          chmod +x platforms/macos/build-app.sh
+          ./platforms/macos/build-app.sh
+
+      - name: Write SHA256 checksum
+        run: |
+          cd dist
+          shasum -a 256 CursorTunnelApp-macos-arm64.zip | tee CursorTunnelApp-macos-arm64.zip.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CursorTunnelApp-macos
+          path: |
+            dist/CursorTunnelApp-macos-arm64.zip
+            dist/CursorTunnelApp-macos-arm64.zip.sha256

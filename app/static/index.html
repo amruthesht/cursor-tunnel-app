@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Cursor Tunnel App</title>
+  <meta name="application-name" content="cursor-tunnel-app" />
+  <meta name="apple-mobile-web-app-title" content="Cursor Tunnel App" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css?v=8" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Cursor Tunnel App</h1>
+      <p class="tagline">Launch &amp; manage Cursor tunnels on remote HPC clusters</p>
+    </div>
+    <div class="pill" id="conn-pill">Not connected</div>
+  </header>
+
+  <main>
+    <section class="panel active" id="panel-connect">
+      <div class="card">
+        <h2>Connect</h2>
+        <p class="hint">SSH to your cluster login node (VPN if required).</p>
+        <form id="connect-form">
+          <label>Login node
+            <select id="host-select" name="host_select"></select>
+          </label>
+          <div id="host-custom-row" class="host-custom-row hidden">
+            <label>Custom hostname
+              <input type="text" id="host-custom-input" placeholder="login.example.edu" autocomplete="off" />
+            </label>
+            <button type="button" class="btn secondary compact" id="host-add-btn">Save to list</button>
+          </div>
+          <label>Username <input type="text" name="ssh_user" required /></label>
+          <label>SSH key path <input type="text" name="ssh_key_path" placeholder="C:\Users\you\.ssh\id_rsa" /></label>
+          <label>Password <span class="optional">if not using key</span><input type="password" name="ssh_password" autocomplete="current-password" /></label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="redeploy_on_connect" id="redeploy-on-connect" />
+            Re-deploy cluster scripts on connect
+            <span class="field-hint">Overwrites scripts on the cluster. Leave off for normal use — scripts auto-install only if missing.</span>
+          </label>
+          <button type="submit" class="btn primary big" id="connect-btn">Connect</button>
+          <p id="setup-status" class="hint setup-status hidden" aria-live="polite"></p>
+        </form>
+        <details class="details-inline">
+          <summary>Advanced settings</summary>
+          <p class="hint">Saved locally for the next time you open the app. <strong>Connect</strong> uses these values; <strong>Save advanced</strong> stores them without connecting.</p>
+          <form id="settings-form" class="settings-inner">
+            <label>Dashboard address <input type="text" name="listen_host" placeholder="127.0.0.1" />
+              <span class="field-hint">127.0.0.1 = this PC only. 0.0.0.0 = phone/LAN (use your PC IP). Restart after changing.</span>
+            </label>
+            <label>Dashboard port <input type="number" name="listen_port" value="8765" min="1024" max="65535" /></label>
+            <label class="checkbox-row">
+              <input type="checkbox" name="shutdown_when_idle" checked />
+              Quit server when dashboard is closed
+            </label>
+            <p class="field-hint dashboard-urls" id="dashboard-urls"></p>
+            <label>SSH port <input type="number" name="ssh_port" value="22" /></label>
+            <label>Remote scripts dir <input type="text" name="remote_dir" placeholder="~/cursor-tunnel" /></label>
+            <button type="button" class="btn secondary" id="deploy-btn">Re-deploy scripts now</button>
+            <span class="field-hint">Uploads latest scripts using the settings above (saved first). Same as Connect with the checkbox on.</span>
+            <button type="submit" class="btn secondary">Save advanced</button>
+          </form>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-running">
+      <div class="card">
+        <div class="row-between">
+          <h2>Running tunnels</h2>
+          <button type="button" class="btn ghost" id="refresh-btn">Refresh</button>
+        </div>
+        <div id="running-gate" class="gate-msg">
+          <p class="hint">Use the <strong>Connect</strong> tab first, then come back here.</p>
+        </div>
+        <div id="running-content" class="hidden">
+          <div id="running-list" class="running-list"></div>
+          <button type="button" class="btn secondary disconnect-btn" id="disconnect-btn">Disconnect SSH</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-launch">
+      <div class="card">
+        <h2>Launch new tunnel</h2>
+        <div id="launch-gate" class="gate-msg">
+          <p class="hint">Use the <strong>Connect</strong> tab first.</p>
+        </div>
+        <div id="launch-content" class="hidden">
+            <form id="launch-form">
+            <label>Other past setups
+              <select id="launch-preset-select">
+                <option value="">— use current values —</option>
+              </select>
+              <span class="field-hint">Optional — restore an earlier launch with different CPUs, memory, account, etc. The form already loads your last successful launch.</span>
+            </label>
+            <label>Tunnel name <input type="text" name="tunnel_name" required /></label>
+            <label>Account <input type="text" name="account" placeholder="Slurm account" /></label>
+            <label>QoS <input type="text" name="qos" placeholder="public" /></label>
+            <label>CPU Core Allocation <input type="number" name="cpus" min="1" max="128" value="4" required /></label>
+            <label>Memory Allocation (GiB) <input type="number" name="mem_gib" min="1" max="1024" value="8" required /></label>
+            <label>GPU Resources <span class="optional">optional</span>
+              <input type="text" name="gpus" placeholder="e.g. gpu:a30:1" />
+            </label>
+            <label>Cursor executable on cluster
+              <input type="text" name="cursor_bin" placeholder="~/cursor-tunnel/cursor" />
+              <span class="field-hint">Path on the cluster. Installed automatically on connect if missing (default <code>~/cursor-tunnel/cursor</code>).</span>
+            </label>
+            <label>Cursor Tunnel Wall Time
+              <input type="text" name="time" placeholder="04:00:00" required />
+              <span class="field-hint">minutes, HH:MM:SS, or days-HH:MM:SS</span>
+            </label>
+            <label>Additional sbatch options <span class="optional">advanced</span>
+              <input type="text" name="extra_sbatch" placeholder="Extra sbatch flags (optional)" />
+            </label>
+            <button type="submit" class="btn primary" id="launch-btn">Start tunnel</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" id="bottom-nav" aria-label="Main">
+    <button type="button" class="nav-btn active" data-tab="connect">
+      <span class="nav-icon">🔌</span>
+      <span>Connect</span>
+    </button>
+    <button type="button" class="nav-btn" data-tab="running">
+      <span class="nav-icon">▶</span>
+      <span>Running</span>
+    </button>
+    <button type="button" class="nav-btn" data-tab="launch">
+      <span class="nav-icon">＋</span>
+      <span>Launch</span>
+    </button>
+  </nav>
+
+  <div class="toast hidden" id="toast"></div>
+  <script src="/app.js?v=26"></script>
+</body>
+</html>

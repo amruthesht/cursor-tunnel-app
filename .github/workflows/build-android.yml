@@ -1,0 +1,43 @@
+name: Build (Android)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java
+        run: echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        env:
+          CI: true
+        run: |
+          chmod +x platforms/android/build-apk.sh
+          ./platforms/android/build-apk.sh
+
+      - name: Write SHA256 checksum
+        run: |
+          cd dist
+          shasum -a 256 CursorTunnelApp-android.apk | tee CursorTunnelApp-android.apk.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CursorTunnelApp-android
+          path: |
+            dist/CursorTunnelApp-android.apk
+            dist/CursorTunnelApp-android.apk.sha256

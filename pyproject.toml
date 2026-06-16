@@ -1,0 +1,21 @@
+[tool.briefcase]
+project_name = "cursor-tunnel-app"
+bundle = "com.cursor.tunnel.app"
+version = "0.0.0"
+url = "https://github.com/amruthesht/cursor-tunnel-app"
+license = "MIT"
+author = "Amruthesh Thirumalaiswamy"
+author_email = "athiru12@asu.edu"
+
+[tool.briefcase.app.app]
+formal_name = "Cursor Tunnel App"
+description = "Dashboard app to connect to and run/manage Cursor tunnels on remote HPC clusters"
+sources = ["app"]
+resources = ["cluster"]
+requires = ["paramiko>=3.4.0"]
+console_app = true
+
+[tool.briefcase.app.app.android]
+requires = ["paramiko>=3.4.0"]
+permission.internet = true
+permission.access_network_state = true

@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+
+# Build outputs
+dist/
+logs/
+*.spec
+
+# Briefcase / Android (generated locally)
+build/
+.briefcase/
+.venv-android/
+*.apk
+*.aab
+
+# Secrets and local env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

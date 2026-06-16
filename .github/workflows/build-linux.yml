@@ -1,0 +1,37 @@
+name: Build (Linux)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build CursorTunnelApp binary
+        run: |
+          chmod +x platforms/linux/build-app.sh
+          ./platforms/linux/build-app.sh
+
+      - name: Write SHA256 checksum
+        run: |
+          cd dist
+          shasum -a 256 CursorTunnelApp-linux-x86_64.tar.gz | tee CursorTunnelApp-linux-x86_64.tar.gz.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CursorTunnelApp-linux
+          path: |
+            dist/CursorTunnelApp-linux-x86_64.tar.gz
+            dist/CursorTunnelApp-linux-x86_64.tar.gz.sha256
