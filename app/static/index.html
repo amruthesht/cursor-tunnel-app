@@ -117,7 +117,8 @@
             </label>
             <label>Tunnel name <input type="text" name="tunnel_name" required /></label>
             <label>Account <input type="text" name="account" placeholder="Slurm account" /></label>
-            <label>QoS <input type="text" name="qos" placeholder="public" /></label>
+            <label>Partition <input type="text" name="partition" value="public" placeholder="public" /></label>
+            <label>QoS <input type="text" name="qos" value="public" placeholder="public" /></label>
             <label>CPU Core Allocation <input type="number" name="cpus" min="1" max="128" value="4" required /></label>
             <label>Memory Allocation (GiB) <input type="number" name="mem_gib" min="1" max="1024" value="8" required /></label>
             <label>GPU Resources <span class="optional">optional</span>
@@ -166,6 +167,6 @@
       </div>
     </div>
   </div>
-  <script src="/app.js?v=27"></script>
+  <script src="/app.js?v=28"></script>
 </body>
 </html>

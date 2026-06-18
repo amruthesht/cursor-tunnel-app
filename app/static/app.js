@@ -317,11 +317,11 @@ function readLaunchForm() {
     mem_gib: form.mem_gib.value,
     time: form.time.value.trim(),
     account: form.account.value.trim(),
+    partition: form.partition.value.trim() || "public",
     qos: form.qos.value.trim(),
     gpus: form.gpus.value.trim(),
     extra_sbatch: form.extra_sbatch.value.trim(),
     cursor_bin: form.cursor_bin.value.trim(),
-    partition: launchDefaults.partition || "public",
   };
 }
 
@@ -332,6 +332,7 @@ function applyLaunchParams(params, { updateName = true } = {}) {
   if (params.mem_gib != null && params.mem_gib !== "") form.mem_gib.value = params.mem_gib;
   if (params.time) form.time.value = params.time;
   if (params.account != null) form.account.value = params.account;
+  if (params.partition != null) form.partition.value = params.partition;
   if (params.qos != null) form.qos.value = params.qos;
   if (params.gpus != null) form.gpus.value = params.gpus;
   if (params.extra_sbatch != null) form.extra_sbatch.value = params.extra_sbatch;
@@ -519,6 +520,7 @@ async function loadConfigIntoForms() {
   launch.mem_gib.value = d.mem_gib || parseInt(String(d.mem || "8"), 10) || 8;
   launch.time.value = d.time || "04:00:00";
   launch.account.value = d.account || "";
+  launch.partition.value = d.partition || "public";
   launch.qos.value = d.qos || "public";
   launch.gpus.value = d.gpus || "";
   launch.extra_sbatch.value = d.extra_sbatch || "";
@@ -705,11 +707,11 @@ async function saveConnectFields() {
         time: launch.time.value,
         tunnel_name: launch.tunnel_name.value,
         account: launch.account.value,
+        partition: launch.partition.value.trim() || "public",
         qos: launch.qos.value,
         gpus: launch.gpus.value.trim(),
         extra_sbatch: launch.extra_sbatch.value.trim(),
         cursor_bin: launch.cursor_bin.value.trim(),
-        partition: launchDefaults.partition || "public",
         auth_provider: "github",
       },
     }),
