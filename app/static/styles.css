@@ -233,6 +233,37 @@ input {
   max-width: 90vw;
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.confirm-box {
+  width: min(100%, 360px);
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.confirm-box p {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .success-card { border-color: rgba(74, 222, 128, 0.35); }
 
 .running-list { display: grid; gap: 12px; margin: 14px 0; }

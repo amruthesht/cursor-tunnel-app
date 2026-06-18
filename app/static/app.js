@@ -113,6 +113,42 @@ function toast(msg) {
   setTimeout(() => el.classList.add("hidden"), 3200);
 }
 
+function confirmDialog(message, { confirmLabel = "OK", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirm-overlay");
+    const msg = document.getElementById("confirm-message");
+    const okBtn = document.getElementById("confirm-ok");
+    const cancelBtn = document.getElementById("confirm-cancel");
+    if (!overlay || !msg || !okBtn || !cancelBtn) {
+      resolve(window.confirm(message));
+      return;
+    }
+
+    msg.textContent = message;
+    okBtn.textContent = confirmLabel;
+    okBtn.classList.toggle("danger", danger);
+    okBtn.classList.toggle("primary", !danger);
+    overlay.classList.remove("hidden");
+
+    const cleanup = (result) => {
+      overlay.classList.add("hidden");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onBackdrop);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onBackdrop = (e) => {
+      if (e.target === overlay) cleanup(false);
+    };
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onBackdrop);
+  });
+}
+
 function setConn(state, text) {
   const pill = document.getElementById("conn-pill");
   pill.textContent = text;
@@ -582,7 +618,10 @@ function syncConnectAuthUi() {
 async function generateDeviceSshKey(force = false) {
   if (
     force &&
-    !confirm("Replace the existing key? You must update authorized_keys on the cluster.")
+    !(await confirmDialog(
+      "Replace the existing key? You must update authorized_keys on the cluster.",
+      { confirmLabel: "Replace", danger: true },
+    ))
   ) {
     return;
   }
@@ -992,7 +1031,7 @@ async function refreshRunning() {
       html += running.map(renderRunning).join("");
     }
     if (stopped.length) {
-      if (running.length) html += '<p class="section-label">Recent stopped</p>';
+      html += '<p class="section-label">Recent Tunnels</p>';
       html += stopped.map(renderStopped).join("");
     }
     if (!running.length && stopped.length) {
@@ -1028,10 +1067,14 @@ async function refreshRunning() {
         try {
           if (card?.dataset.params) params = JSON.parse(decodeURIComponent(card.dataset.params));
         } catch { /* ignore */ }
-        stopTunnel(btn.dataset.jobId, {
-          tunnel_name: card?.querySelector(".tunnel-name")?.textContent?.trim() || "",
-          params,
-        });
+        stopTunnel(
+          btn.dataset.jobId,
+          {
+            tunnel_name: card?.querySelector(".tunnel-name")?.textContent?.trim() || "",
+            params,
+          },
+          btn,
+        );
       });
     });
 
@@ -1121,8 +1164,14 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-async function stopTunnel(jobId, meta = {}) {
-  if (!confirm(`Stop tunnel job ${jobId}?`)) return;
+async function stopTunnel(jobId, meta = {}, btn = null) {
+  const ok = await confirmDialog(`Stop tunnel job ${jobId}?`, { confirmLabel: "Stop", danger: true });
+  if (!ok) return;
+  const prevLabel = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Stopping…";
+  }
   try {
     const res = await api("/api/stop", {
       method: "POST",
@@ -1134,6 +1183,10 @@ async function stopTunnel(jobId, meta = {}) {
     refreshRunning();
   } catch (err) {
     toast(err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel || "Stop";
+    }
   }
 }
 
@@ -1144,7 +1197,7 @@ async function dismissStoppedCard(jobId) {
       body: JSON.stringify({ job_id: jobId }),
     });
     if (!res.ok) throw new Error(res.error);
-    toast("Removed from recent stopped");
+    toast("Removed from recent tunnels");
     refreshRunning();
   } catch (err) {
     toast(err.message);

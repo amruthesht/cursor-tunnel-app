@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="Cursor Tunnel App" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="stylesheet" href="/styles.css?v=13" />
 </head>
 <body>
   <header class="topbar">
@@ -157,6 +157,15 @@
   </nav>
 
   <div class="toast hidden" id="toast"></div>
-  <script src="/app.js?v=26"></script>
+  <div class="confirm-overlay hidden" id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-message">
+    <div class="confirm-box">
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button type="button" class="btn secondary" id="confirm-cancel">Cancel</button>
+        <button type="button" class="btn danger" id="confirm-ok">OK</button>
+      </div>
+    </div>
+  </div>
+  <script src="/app.js?v=27"></script>
 </body>
 </html>

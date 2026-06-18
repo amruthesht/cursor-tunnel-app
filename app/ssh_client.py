@@ -694,7 +694,7 @@ def _merge_job_status(jobs: list[dict]) -> list[dict]:
 
 def dismiss_stopped_job(job_id: str) -> dict:
     if dismiss_stopped(job_id):
-        return {"ok": True, "message": "Removed from recent stopped"}
+        return {"ok": True, "message": "Removed from recent tunnels"}
     return {"ok": False, "error": "Stopped tunnel not found in history"}
 
 
