@@ -193,14 +193,18 @@ def connect(cfg: dict | None = None) -> paramiko.SSHClient:
     }
 
     key_path = (cfg.get("ssh_key_path") or "").strip()
-    if key_path:
+    password = (cfg.get("ssh_password") or "").strip()
+
+    if password:
+        kwargs["password"] = password
+        kwargs["allow_agent"] = False
+        kwargs["look_for_keys"] = False
+    elif key_path:
         expanded = str(Path(key_path).expanduser())
         if Path(expanded).exists():
             kwargs["key_filename"] = expanded
-
-    password = cfg.get("ssh_password") or ""
-    if password:
-        kwargs["password"] = password
+        else:
+            raise FileNotFoundError(f"SSH key not found: {expanded}")
 
     client.connect(**kwargs, banner_timeout=60, auth_timeout=60)
     transport = client.get_transport()

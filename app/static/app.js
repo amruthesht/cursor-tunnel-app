@@ -9,6 +9,10 @@ let launchDefaults = {};
 let savedHosts = [];
 let defaultCursorBin = "~/cursor-tunnel/cursor";
 let launchPresets = [];
+/** Path set by Generate SSH key (not shown in the manual path field). */
+let autofillKeyPath = "";
+/** Public key line for Copy button (not shown in the UI). */
+let cachedPublicKey = "";
 /** @type {Record<string, {code:string,url:string,session_id:string,status:string,tunnel_name:string}>} */
 const cardAuth = {};
 /** @type {Record<string, { seconds: number, syncedAt: number }>} */
@@ -454,8 +458,12 @@ async function loadConfigIntoForms() {
   populateHostSelect(c.ssh_hosts || [], c.ssh_host || "");
   const connect = document.getElementById("connect-form");
   connect.ssh_user.value = c.ssh_user || "";
-  connect.ssh_key_path.value = c.ssh_key_path || "";
+  connect.ssh_key_path_manual.value = "";
+  autofillKeyPath = "";
+  const savedKeyPath = (c.ssh_key_path || "").trim();
   connect.ssh_password.value = c.ssh_password === "********" ? "" : c.ssh_password || "";
+  await loadSshKeyPanel(savedKeyPath);
+  syncConnectAuthUi();
 
   const settings = document.getElementById("settings-form");
   settings.ssh_port.value = c.ssh_port || 22;
@@ -498,6 +506,138 @@ async function showDashboardUrls() {
   }
 }
 
+async function loadSshKeyPanel(savedKeyPath = "") {
+  const statusEl = document.getElementById("ssh-key-status");
+  const copyBtn = document.getElementById("ssh-key-copy-btn");
+  const manualInput = document.querySelector("#connect-form [name=ssh_key_path_manual]");
+  if (!statusEl) return;
+  try {
+    const info = await api("/api/ssh-key");
+    if (info.exists) {
+      statusEl.textContent = "In-app key ready — copy the public key to the cluster.";
+      cachedPublicKey = info.public_key || "";
+      copyBtn?.classList.remove("hidden");
+      const appPath = (info.private_path || "").trim();
+      if (savedKeyPath && appPath && savedKeyPath === appPath && !(manualInput?.value.trim())) {
+        autofillKeyPath = appPath;
+      } else if (!manualInput?.value.trim() && !autofillKeyPath && appPath && !savedKeyPath) {
+        autofillKeyPath = appPath;
+      } else if (savedKeyPath && savedKeyPath !== appPath && manualInput) {
+        manualInput.value = savedKeyPath;
+      }
+    } else {
+      statusEl.textContent = "Generate a key here, or enter a custom SSH key path below.";
+      cachedPublicKey = "";
+      copyBtn?.classList.add("hidden");
+      if (savedKeyPath && manualInput) manualInput.value = savedKeyPath;
+    }
+    syncConnectAuthUi();
+  } catch (err) {
+    statusEl.textContent = err.message || "Could not load key status";
+  }
+}
+
+function connectForm() {
+  return document.getElementById("connect-form");
+}
+
+function usesPasswordAuth() {
+  return !!connectForm()?.ssh_password?.value.trim();
+}
+
+function manualKeyPath() {
+  return connectForm()?.ssh_key_path_manual?.value.trim() || "";
+}
+
+function effectiveKeyPath() {
+  const manual = manualKeyPath();
+  if (manual) return manual;
+  return autofillKeyPath || "";
+}
+
+function storedKeyPath() {
+  return effectiveKeyPath();
+}
+
+function syncConnectAuthUi() {
+  const autofillEl = document.getElementById("ssh-key-path-autofill");
+  const pwdHint = document.getElementById("ssh-password-hint");
+  const manualHint = document.getElementById("ssh-key-path-manual-hint");
+  const manual = manualKeyPath();
+  if (autofillEl) {
+    autofillEl.classList.toggle("hidden", !(autofillKeyPath && !manual));
+  }
+  if (manualHint) {
+    manualHint.textContent = manual
+      ? "Overrides the generated in-app key (if any)."
+      : "";
+  }
+  if (pwdHint) {
+    pwdHint.textContent = usesPasswordAuth()
+      ? "Password will be used; SSH key is ignored."
+      : "";
+  }
+}
+
+async function generateDeviceSshKey(force = false) {
+  if (
+    force &&
+    !confirm("Replace the existing key? You must update authorized_keys on the cluster.")
+  ) {
+    return;
+  }
+  try {
+    const res = await api("/api/ssh-key/generate", {
+      method: "POST",
+      body: JSON.stringify({ force }),
+    });
+    autofillKeyPath = res.private_path || "";
+    cachedPublicKey = res.public_key || "";
+    const manualInput = document.querySelector("#connect-form [name=ssh_key_path_manual]");
+    if (manualInput) manualInput.value = "";
+    await loadSshKeyPanel(autofillKeyPath);
+    syncConnectAuthUi();
+    toast(res.message || "SSH key ready");
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+document.getElementById("ssh-key-generate-btn")?.addEventListener("click", async () => {
+  try {
+    const info = await api("/api/ssh-key");
+    await generateDeviceSshKey(info.exists);
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+document.getElementById("ssh-key-copy-btn")?.addEventListener("click", async () => {
+  let text = cachedPublicKey.trim();
+  if (!text) {
+    try {
+      const info = await api("/api/ssh-key");
+      text = (info.public_key || "").trim();
+      cachedPublicKey = text;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (!text) {
+    toast("No public key to copy — generate a key first");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Public key copied — paste into authorized_keys on the cluster");
+  } catch {
+    toast("Copy failed — try again");
+  }
+});
+
+document.querySelector("#connect-form [name=ssh_key_path_manual]")?.addEventListener("input", syncConnectAuthUi);
+document.querySelector("#connect-form [name=ssh_password]")?.addEventListener("input", syncConnectAuthUi);
+
 async function saveConnectFields() {
   syncRemoteDirFromUser();
   const c = document.getElementById("connect-form");
@@ -512,7 +652,7 @@ async function saveConnectFields() {
       ssh_hosts: savedHosts,
       ssh_user: c.ssh_user.value.trim(),
       ssh_port: Number(s.ssh_port.value),
-      ssh_key_path: c.ssh_key_path.value.trim(),
+      ssh_key_path: storedKeyPath(),
       ssh_password: c.ssh_password.value,
       remote_dir: s.remote_dir.value.trim(),
       listen_host: s.listen_host.value.trim() || "127.0.0.1",

@@ -103,6 +103,11 @@ def load_config() -> dict:
             key = Path.home() / ".ssh" / "id_rsa"
             if key.exists():
                 cfg["ssh_key_path"] = str(key)
+        from ssh_keys import private_key_path
+
+        app_key = private_key_path()
+        if app_key.is_file():
+            cfg["ssh_key_path"] = str(app_key)
         return cfg
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
@@ -121,6 +126,12 @@ def load_config() -> dict:
     if is_android():
         merged["open_browser"] = False
         merged["shutdown_when_idle"] = False
+    if not merged.get("ssh_key_path"):
+        from ssh_keys import private_key_path
+
+        app_key = private_key_path()
+        if app_key.is_file():
+            merged["ssh_key_path"] = str(app_key)
     return merged
 
 

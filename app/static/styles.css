@@ -448,6 +448,26 @@ input {
 
 .details-inline summary { cursor: pointer; padding: 8px 0; }
 
+.ssh-key-box {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.ssh-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ssh-key-path-autofill {
+  margin: 0 0 10px;
+  color: var(--accent, #38bdf8);
+}
+
 .card-actions-wrap {
   flex-wrap: wrap;
 }

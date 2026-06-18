@@ -9,7 +9,7 @@
   <meta name="application-name" content="cursor-tunnel-app" />
   <meta name="apple-mobile-web-app-title" content="Cursor Tunnel App" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=8" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
 </head>
 <body>
   <header class="topbar">
@@ -36,8 +36,23 @@
             <button type="button" class="btn secondary compact" id="host-add-btn">Save to list</button>
           </div>
           <label>Username <input type="text" name="ssh_user" required /></label>
-          <label>SSH key path <input type="text" name="ssh_key_path" placeholder="C:\Users\you\.ssh\id_rsa" /></label>
-          <label>Password <span class="optional">if not using key</span><input type="password" name="ssh_password" autocomplete="current-password" /></label>
+          <div class="ssh-key-box" id="ssh-key-box">
+            <p class="field-hint" id="ssh-key-status">Checking device key…</p>
+            <div class="ssh-key-actions">
+              <button type="button" class="btn secondary compact" id="ssh-key-generate-btn">Generate SSH key</button>
+              <button type="button" class="btn ghost compact hidden" id="ssh-key-copy-btn">Copy public key</button>
+            </div>
+            <p class="field-hint">Copy the public key to <code>~/.ssh/authorized_keys</code> on the cluster once, or enter a custom key path below.</p>
+          </div>
+          <p id="ssh-key-path-autofill" class="field-hint ssh-key-path-autofill hidden">SSH key path autofilled</p>
+          <label>SSH key path <span class="optional">custom</span>
+            <input type="text" name="ssh_key_path_manual" placeholder="~/.ssh/id_ed25519" autocomplete="off" />
+            <span class="field-hint" id="ssh-key-path-manual-hint"></span>
+          </label>
+          <label>Password
+            <input type="password" name="ssh_password" autocomplete="current-password" />
+            <span class="field-hint" id="ssh-password-hint"></span>
+          </label>
           <label class="checkbox-row">
             <input type="checkbox" name="redeploy_on_connect" id="redeploy-on-connect" />
             Re-deploy cluster scripts on connect

@@ -63,6 +63,10 @@ else
   briefcase update android "${briefcase_args[@]}"
 fi
 
+# If you changed Android permissions in pyproject.toml, run once:
+#   briefcase create android
+# (update alone does not refresh AndroidManifest.xml)
+
 briefcase build android "${briefcase_args[@]}"
 briefcase package android -p apk "${briefcase_args[@]}"
 

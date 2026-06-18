@@ -22,6 +22,7 @@ from config_store import (
     ssh_hosts_for,
 )
 from setup_status import get_setup_status
+from ssh_keys import generate_keypair, key_status
 from ssh_client import (
     clear_ssh_pool,
     deploy_cluster_scripts,
@@ -156,6 +157,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/setup-status":
                 json_response(self, 200, {"ok": True, **get_setup_status()})
                 return
+            if path == "/api/ssh-key":
+                json_response(self, 200, {"ok": True, **key_status()})
+                return
             if path == "/api/defaults":
                 cfg = load_config()
                 defaults = {**cfg["defaults"]}
@@ -243,6 +247,11 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/heartbeat":
             touch_heartbeat()
             json_response(self, 200, {"ok": True})
+            return
+
+        if parsed.path == "/api/ssh-key/generate":
+            force = bool(body.get("force"))
+            json_response(self, 200, generate_keypair(force=force))
             return
 
         if parsed.path == "/api/test":

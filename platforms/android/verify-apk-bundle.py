@@ -10,6 +10,7 @@ import zipfile
 REQUIRED = (
     "app/android_ui.pyc",
     "app/platform_detect.pyc",
+    "app/ssh_keys.pyc",
     "app/resources/cluster/submit-job.sh",
     "app/static/index.html",
 )
