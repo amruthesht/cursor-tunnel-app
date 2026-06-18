@@ -19,8 +19,41 @@ fi
 source "$VENV/bin/activate"
 
 echo "Installing Briefcase + deps..."
-python -m pip install -U pip briefcase paramiko
+python -m pip install -U pip briefcase paramiko pillow
 python -m pip install -r requirements.txt
+
+verify_android_icons() {
+  local missing=0 size variant f
+  for size in 48 72 96 144 192; do
+    for variant in square round; do
+      f="$REPO_ROOT/resources/${variant}-icon-${size}.png"
+      if [[ ! -f "$f" ]]; then
+        echo "Missing launcher icon: $f" >&2
+        missing=1
+      fi
+    done
+  done
+  for size in 320 480 640 960 1280; do
+    f="$REPO_ROOT/resources/square-icon-${size}.png"
+    if [[ ! -f "$f" ]]; then
+      echo "Missing splash icon: $f" >&2
+      missing=1
+    fi
+  done
+  for size in 108 162 216 324 432; do
+    f="$REPO_ROOT/resources/adaptive-icon-${size}.png"
+    if [[ ! -f "$f" ]]; then
+      echo "Missing adaptive icon: $f" >&2
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    echo "ERROR: Android icon PNGs missing under resources/ (see pyproject.toml icon.*)" >&2
+    exit 1
+  fi
+}
+
+verify_android_icons
 
 briefcase_args=()
 if [[ "${CI:-}" == "true" ]]; then
@@ -60,8 +93,17 @@ if [[ -z "$android_project" ]]; then
   briefcase create android "${briefcase_args[@]}"
 else
   echo "Updating Android project..."
+  # Drop cached launcher/splash PNGs so Briefcase cannot keep the default bee icons.
+  find "$REPO_ROOT/build" -path '*/mipmap-*' \( \
+    -name 'ic_launcher.png' -o -name 'ic_launcher_round.png' -o \
+    -name 'ic_launcher_foreground.png' -o -name 'splash.png' \
+  \) -delete 2>/dev/null || true
   briefcase update android --update-resources "${briefcase_args[@]}"
 fi
+
+chmod +x "$SCRIPT_DIR/install-launcher-icons.sh"
+"$SCRIPT_DIR/install-launcher-icons.sh"
+python "$SCRIPT_DIR/verify-gradle-icons.py"
 
 # If you changed Android permissions in pyproject.toml, run once:
 #   briefcase create android

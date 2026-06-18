@@ -16,6 +16,7 @@ requires = ["paramiko>=3.4.0"]
 console_app = true
 icon.square = "resources/square-icon"
 icon.round = "resources/round-icon"
+icon.adaptive = "resources/adaptive-icon"
 
 [tool.briefcase.app.app.android]
 requires = [
