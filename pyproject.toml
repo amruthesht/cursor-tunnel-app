@@ -14,7 +14,6 @@ sources = ["app"]
 resources = ["cluster"]
 requires = ["paramiko>=3.4.0"]
 console_app = true
-icon = "resources/icon"
 icon.square = "resources/square-icon"
 icon.round = "resources/round-icon"
 
