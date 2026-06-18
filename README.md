@@ -2,6 +2,8 @@
 
 SSH to a Slurm login node, submit a job, and run a Cursor remote tunnel on a compute node.
 
+**Disclaimer:** Cursor Tunnel App is an unofficial third-party tool. It is not affiliated with, endorsed by, or sponsored by Cursor, Inc. “Cursor” is used only to describe compatibility with the Cursor editor and its remote tunnel feature.
+
 ## Download
 
 Pre-built apps are on [GitHub Releases](https://github.com/amruthesht/cursor-tunnel-app/releases) when I publish them:

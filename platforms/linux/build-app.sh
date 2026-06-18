@@ -30,8 +30,13 @@ echo "Installing build deps..."
 VERSION="$("$PYTHON" -c "import sys; sys.path.insert(0, 'app'); from version import __version__; print(__version__)")"
 ARCH="$(uname -m)"
 echo "Building CursorTunnelApp v$VERSION (Linux ${ARCH})..."
+ICON="$ROOT/resources/icon.png"
+ICON_ARGS=()
+if [[ -f "$ICON" ]]; then
+  ICON_ARGS=(--icon "$ICON")
+fi
 
-"$PYTHON" -m PyInstaller --noconfirm --onefile --name CursorTunnelApp \
+"$PYTHON" -m PyInstaller --noconfirm --onefile --name CursorTunnelApp "${ICON_ARGS[@]}" \
   --add-data "app/static:static" \
   --add-data "cluster:cluster" \
   --paths "app" \

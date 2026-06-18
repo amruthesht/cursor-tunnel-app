@@ -14,6 +14,9 @@ sources = ["app"]
 resources = ["cluster"]
 requires = ["paramiko>=3.4.0"]
 console_app = true
+icon = "resources/icon"
+icon.square = "resources/square-icon"
+icon.round = "resources/round-icon"
 
 [tool.briefcase.app.app.android]
 requires = [
@@ -26,3 +29,4 @@ permission.access_network_state = true
 requirement_installer_args = [
     "--find-links", "./platforms/android/wheels",
 ]
+

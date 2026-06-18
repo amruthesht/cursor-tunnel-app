@@ -60,7 +60,7 @@ if [[ -z "$android_project" ]]; then
   briefcase create android "${briefcase_args[@]}"
 else
   echo "Updating Android project..."
-  briefcase update android "${briefcase_args[@]}"
+  briefcase update android --update-resources "${briefcase_args[@]}"
 fi
 
 # If you changed Android permissions in pyproject.toml, run once:

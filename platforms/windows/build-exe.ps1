@@ -50,8 +50,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $version = & $python -c "import sys; sys.path.insert(0, 'app'); from version import __version__; print(__version__)"
+$icon = Join-Path $Root "resources\icon.ico"
 Write-Host "Building CursorTunnelApp.exe v$version (no console window)..."
-& $python -m PyInstaller --noconfirm --onefile --noconsole --name CursorTunnelApp `
+$iconArg = @()
+if (Test-Path $icon) { $iconArg = @("--icon", $icon) }
+& $python -m PyInstaller --noconfirm --onefile --noconsole --name CursorTunnelApp @iconArg `
   --add-data "app/static;static" `
   --add-data "cluster;cluster" `
   --paths "app" `

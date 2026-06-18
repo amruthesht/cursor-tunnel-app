@@ -29,8 +29,13 @@ echo "Installing build deps..."
 
 VERSION="$("$PYTHON" -c "import sys; sys.path.insert(0, 'app'); from version import __version__; print(__version__)")"
 echo "Building CursorTunnelApp.app v$VERSION (macOS)..."
+ICON="$ROOT/resources/icon.png"
+ICON_ARGS=()
+if [[ -f "$ICON" ]]; then
+  ICON_ARGS=(--icon "$ICON")
+fi
 
-"$PYTHON" -m PyInstaller --noconfirm --windowed --name CursorTunnelApp \
+"$PYTHON" -m PyInstaller --noconfirm --windowed --name CursorTunnelApp "${ICON_ARGS[@]}" \
   --add-data "app/static:static" \
   --add-data "cluster:cluster" \
   --paths "app" \
