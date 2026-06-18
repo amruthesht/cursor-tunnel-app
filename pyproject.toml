@@ -16,6 +16,13 @@ requires = ["paramiko>=3.4.0"]
 console_app = true
 
 [tool.briefcase.app.app.android]
-requires = ["paramiko>=3.4.0"]
+requires = [
+    "paramiko>=3.4.0",
+    "cryptography==42.0.8",
+]
 permission.internet = true
 permission.access_network_state = true
+# 16 KB-aligned cryptography wheels (Chaquopy -0 builds are 4 KB only). See platforms/android/build-apk.sh.
+requirement_installer_args = [
+    "--find-links", "./platforms/android/wheels",
+]

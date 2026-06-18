@@ -69,7 +69,14 @@ def ssh_hosts_for(cfg: dict) -> list[str]:
 
 
 def app_config_dir() -> Path:
-    if sys.platform == "win32":
+    from platform_detect import is_android
+
+    if is_android():
+        from org.beeware.android import MainActivity
+
+        activity = MainActivity.singletonThis
+        base = Path(activity.getFilesDir().getAbsolutePath()) / APP_SLUG
+    elif sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home())) / APP_SLUG
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / APP_SLUG
@@ -87,9 +94,15 @@ def load_config() -> dict:
     path = config_path()
     if not path.exists():
         cfg = deepcopy(DEFAULT_CONFIG)
-        key = Path.home() / ".ssh" / "id_rsa"
-        if key.exists():
-            cfg["ssh_key_path"] = str(key)
+        from platform_detect import is_android
+
+        if is_android():
+            cfg["open_browser"] = False
+            cfg["shutdown_when_idle"] = False
+        else:
+            key = Path.home() / ".ssh" / "id_rsa"
+            if key.exists():
+                cfg["ssh_key_path"] = str(key)
         return cfg
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
@@ -103,6 +116,11 @@ def load_config() -> dict:
     for key in ("partition", "qos"):
         if not merged["defaults"].get(key) and DEFAULT_CONFIG["defaults"].get(key):
             merged["defaults"][key] = DEFAULT_CONFIG["defaults"][key]
+    from platform_detect import is_android
+
+    if is_android():
+        merged["open_browser"] = False
+        merged["shutdown_when_idle"] = False
     return merged
 
 

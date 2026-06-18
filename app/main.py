@@ -31,6 +31,14 @@ def open_browser_later() -> None:
 
 
 def main() -> None:
+    from platform_detect import is_android
+
+    if is_android():
+        from android_ui import boot
+
+        boot()
+        return
+
     threading.Thread(target=open_browser_later, daemon=True).start()
     run_server()
 
