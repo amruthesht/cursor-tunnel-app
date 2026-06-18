@@ -375,6 +375,17 @@ input {
   color: #f87171;
 }
 
+.card-register-warning {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.card-register-warning .register-status-title {
+  color: #fbbf24;
+}
+
 .register-badge {
   display: inline-flex;
   align-items: center;

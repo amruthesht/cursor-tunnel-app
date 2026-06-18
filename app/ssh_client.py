@@ -13,6 +13,7 @@ import paramiko
 
 from branding import APP_SLUG, DEFAULT_REMOTE_DIR
 from config_store import default_cursor_bin, default_remote_dir, load_config
+from platform_detect import is_android
 from setup_status import clear_setup_status, set_setup_status
 from slurm_time import clean_tunnel_name, is_slurm_state_code, normalize_time_limit, remaining_time
 from tunnel_history import (
@@ -28,6 +29,8 @@ from tunnel_history import (
 
 SSH_MAX_RETRIES = 3
 SSH_RETRY_DELAY_SEC = 0.75
+LOGIN_POLL_SEC = 2.0
+LOGIN_TIMEOUT_SEC = 600
 
 @dataclass
 class LoginSession:
@@ -36,6 +39,8 @@ class LoginSession:
     url: str
     provider: str
     status: str = "pending"
+    was_logged_in: bool = False
+    detached: bool = False
     _client: paramiko.SSHClient | None = None
     _channel: paramiko.Channel | None = None
 
@@ -665,6 +670,7 @@ def job_status(cfg: dict | None = None) -> dict:
                 "ok": True,
                 "jobs": jobs,
                 "recent_logs": logs[:5],
+                "tunnel_auth": tunnel_auth_status(cfg),
             }
         if code != 0:
             msg = (err or out).strip()
@@ -672,7 +678,12 @@ def job_status(cfg: dict | None = None) -> dict:
                 msg = "Could not read tunnel status from cluster (try Re-deploy scripts on Connect)"
             return {"ok": False, "error": msg or f"status.sh failed (exit {code})"}
         jobs = _merge_job_status(jobs)
-        return {"ok": True, "jobs": jobs, "recent_logs": logs[:5]}
+        return {
+            "ok": True,
+            "jobs": jobs,
+            "recent_logs": logs[:5],
+            "tunnel_auth": tunnel_auth_status(cfg),
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -741,11 +752,161 @@ def stop_jobs(cfg: dict | None = None) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
-def _wait_login(session_id: str) -> None:
+def _login_log_path(cfg: dict) -> str:
+    return f"{remote_base(cfg)}/.device-login.log"
+
+
+def _login_pid_path(cfg: dict) -> str:
+    return f"{remote_base(cfg)}/.device-login.pid"
+
+
+def _tunnel_user_logout_cmd(cfg: dict) -> str:
+    cb = cursor_bin(cfg)
+    return (
+        f"{shell_cd(cfg)} && "
+        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1 && "
+        f"{cb} tunnel user logout"
+    )
+
+
+def _login_cmd(cfg: dict, provider: str) -> str:
+    return (
+        f"{shell_cd(cfg)} && "
+        f"{_cursor_target_shell_var(cfg)} && "
+        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1 && "
+        f"\"$TARGET\" tunnel user login --provider {shlex.quote(provider)}"
+    )
+
+
+def _start_detached_login(cfg: dict, provider: str) -> None:
+    """Run device login on the cluster so it survives SSH drops (Android backgrounding)."""
+    log = _login_log_path(cfg)
+    pid = _login_pid_path(cfg)
+    inner = (
+        f"{_cursor_target_shell_var(cfg)}; "
+        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1; "
+        f"\"$TARGET\" tunnel user login --provider {shlex.quote(provider)}"
+    )
+    cmd = (
+        f"{shell_cd(cfg)} && "
+        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1 && "
+        f"[ -f {shlex.quote(pid)} ] && kill $(cat {shlex.quote(pid)}) 2>/dev/null || true; "
+        f"rm -f {shlex.quote(pid)}; "
+        f": > {shlex.quote(log)} && "
+        f"nohup script -q -f -c {shlex.quote(inner)} {shlex.quote(log)} </dev/null >/dev/null 2>&1 & "
+        f"echo $! > {shlex.quote(pid)}"
+    )
+    run_remote(cmd, cfg, timeout=30)
+
+
+def _read_login_log(cfg: dict) -> str:
+    log = _login_log_path(cfg)
+    out, _, _ = run_remote(f"cat {shlex.quote(log)} 2>/dev/null || true", cfg, timeout=15)
+    return out
+
+
+def _login_process_running(cfg: dict) -> bool:
+    pid = _login_pid_path(cfg)
+    cmd = (
+        f"[ -f {shlex.quote(pid)} ] && kill -0 $(cat {shlex.quote(pid)}) 2>/dev/null "
+        f"&& echo RUNNING || echo DONE"
+    )
+    try:
+        out, _, _ = run_remote(cmd, cfg, timeout=15)
+        return "RUNNING" in out
+    except Exception:
+        return False
+
+
+def _cleanup_detached_login(cfg: dict) -> None:
+    pid = _login_pid_path(cfg)
+    run_remote(
+        f"[ -f {shlex.quote(pid)} ] && kill $(cat {shlex.quote(pid)}) 2>/dev/null || true; "
+        f"rm -f {shlex.quote(pid)}",
+        cfg,
+        timeout=15,
+    )
+
+
+def _tunnel_user_show_cmd(cfg: dict) -> str:
+    cb = cursor_bin(cfg)
+    return (
+        f"{shell_cd(cfg)} && "
+        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1 && "
+        f"{cb} tunnel user show"
+    )
+
+
+def _tunnel_login_state(cfg: dict | None = None, provider: str = "github") -> str:
+    """Return logged_in, not_logged_in, or unknown."""
+    cfg = cfg or load_config()
+    try:
+        out, err, _code = run_remote(_tunnel_user_show_cmd(cfg), cfg, timeout=30)
+    except Exception:
+        return "unknown"
+    text = f"{out}\n{err}".strip()
+    if not text:
+        return "unknown"
+    lower = text.lower()
+    if "not logged in" in lower:
+        return "not_logged_in"
+    match = re.search(r"logged in(?:\s+with\s+provider\s+(\w+))?", text, re.I)
+    if match:
+        seen = (match.group(1) or "").lower()
+        if provider == "github" and seen == "microsoft":
+            return "not_logged_in"
+        if provider == "microsoft" and seen == "github":
+            return "not_logged_in"
+        return "logged_in"
+    return "unknown"
+
+
+def tunnel_auth_status(cfg: dict | None = None) -> dict:
+    """Cluster-wide Cursor tunnel GitHub/Microsoft login (same on every device)."""
+    cfg = cfg or load_config()
+    provider = cfg.get("defaults", {}).get("auth_provider", "github")
+    state = _tunnel_login_state(cfg, provider)
+    return {
+        "registered": state == "logged_in",
+        "state": state,
+        "provider": provider,
+    }
+
+
+def _verify_tunnel_user_logged_in(cfg: dict | None = None, provider: str = "github") -> bool:
+    return _tunnel_login_state(cfg, provider) == "logged_in"
+
+
+def _should_complete_detached_login(session: LoginSession, cfg: dict) -> bool:
+    """Detached login must finish on the cluster before we treat auth as saved."""
+    if _login_process_running(cfg):
+        return False
+    if session.was_logged_in:
+        return False
+    return _verify_tunnel_user_logged_in(cfg, session.provider)
+
+
+def _close_login_transport(session: LoginSession) -> None:
+    try:
+        if session._channel:
+            session._channel.close()
+    except Exception:
+        pass
+    try:
+        if session._client:
+            session._client.close()
+    except Exception:
+        pass
+    session._channel = None
+    session._client = None
+
+
+def _wait_login_interactive(session_id: str) -> None:
     with login_lock:
         session = login_sessions.get(session_id)
     if not session or not session._channel:
         return
+
     ch = session._channel
     try:
         while not ch.exit_status_ready():
@@ -755,34 +916,37 @@ def _wait_login(session_id: str) -> None:
     except Exception:
         session.status = "failed"
     finally:
-        if session._client:
-            session._client.close()
+        _close_login_transport(session)
 
 
-def start_login(provider: str, cfg: dict | None = None, bundle_dir: Path | None = None) -> dict:
+def _wait_login_detached(session_id: str) -> None:
+    with login_lock:
+        session = login_sessions.get(session_id)
+    if not session:
+        return
+
+    cfg = load_config()
+    deadline = time.time() + LOGIN_TIMEOUT_SEC
+
+    while time.time() < deadline and session.status == "pending":
+        if _should_complete_detached_login(session, cfg):
+            session.status = "complete"
+            break
+        time.sleep(LOGIN_POLL_SEC)
+
+    if session.status == "pending":
+        session.status = "complete" if _should_complete_detached_login(session, cfg) else "failed"
+
+    try:
+        _cleanup_detached_login(cfg)
+    except Exception:
+        pass
+
+
+def _start_login_interactive(cfg: dict, provider: str, was_logged_in: bool) -> dict:
     import uuid
 
-    cfg = cfg or load_config()
-    if bundle_dir is not None:
-        deploy = ensure_cluster_scripts(bundle_dir, cfg)
-        if not deploy.get("ok"):
-            return {"ok": False, "error": deploy.get("error", "Could not deploy cluster scripts")}
-
-    clear_setup_status()
-    try:
-        cursor = ensure_cursor_cli(cfg)
-        if not cursor.get("ok"):
-            return {"ok": False, "error": cursor.get("error", "Cursor CLI setup failed")}
-    finally:
-        clear_setup_status()
-
-    cb = cursor_bin(cfg)
-    cmd = (
-        f"{shell_cd(cfg)} && "
-        f"export CURSOR_CLI_DISABLE_KEYCHAIN_ENCRYPT=1 && "
-        f"{cb} tunnel user login --provider {shlex.quote(provider)}"
-    )
-
+    cmd = _login_cmd(cfg, provider)
     try:
         client = connect(cfg)
         channel = client.get_transport().open_session()  # type: ignore[union-attr]
@@ -818,12 +982,14 @@ def start_login(provider: str, cfg: dict | None = None, bundle_dir: Path | None 
             code=code,
             url=url or "https://github.com/login/device",
             provider=provider,
+            was_logged_in=was_logged_in,
+            detached=False,
             _client=client,
             _channel=channel,
         )
         with login_lock:
             login_sessions[session_id] = session
-        threading.Thread(target=_wait_login, args=(session_id,), daemon=True).start()
+        threading.Thread(target=_wait_login_interactive, args=(session_id,), daemon=True).start()
 
         return {
             "ok": True,
@@ -836,11 +1002,110 @@ def start_login(provider: str, cfg: dict | None = None, bundle_dir: Path | None 
         return {"ok": False, "error": str(exc)}
 
 
+def _start_login_detached(cfg: dict, provider: str, was_logged_in: bool) -> dict:
+    import uuid
+
+    try:
+        _start_detached_login(cfg, provider)
+
+        collected = ""
+        code = None
+        url = None
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            collected = _read_login_log(cfg)
+            code, url = parse_device_login(collected, provider)
+            if code:
+                break
+            if not _login_process_running(cfg) and collected.strip():
+                break
+            time.sleep(0.5)
+
+        if not code:
+            try:
+                _cleanup_detached_login(cfg)
+            except Exception:
+                pass
+            return {
+                "ok": False,
+                "error": "Could not read device code from cluster.",
+                "log": collected[-1500:],
+            }
+
+        session_id = str(uuid.uuid4())
+        session = LoginSession(
+            session_id=session_id,
+            code=code,
+            url=url or "https://github.com/login/device",
+            provider=provider,
+            was_logged_in=was_logged_in,
+            detached=True,
+        )
+        with login_lock:
+            login_sessions[session_id] = session
+        threading.Thread(target=_wait_login_detached, args=(session_id,), daemon=True).start()
+
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "code": code,
+            "url": session.url,
+            "provider": provider,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def start_login(
+    provider: str,
+    cfg: dict | None = None,
+    bundle_dir: Path | None = None,
+    *,
+    force: bool = False,
+) -> dict:
+    import uuid
+
+    cfg = cfg or load_config()
+    if bundle_dir is not None:
+        deploy = ensure_cluster_scripts(bundle_dir, cfg)
+        if not deploy.get("ok"):
+            return {"ok": False, "error": deploy.get("error", "Could not deploy cluster scripts")}
+
+    clear_setup_status()
+    try:
+        cursor = ensure_cursor_cli(cfg)
+        if not cursor.get("ok"):
+            return {"ok": False, "error": cursor.get("error", "Cursor CLI setup failed")}
+    finally:
+        clear_setup_status()
+
+    if force and is_android():
+        try:
+            run_remote(_tunnel_user_logout_cmd(cfg), cfg, timeout=30)
+        except Exception:
+            pass
+
+    was_logged_in = _verify_tunnel_user_logged_in(cfg, provider)
+    if force and is_android():
+        was_logged_in = False
+
+    if is_android():
+        return _start_login_detached(cfg, provider, was_logged_in)
+    return _start_login_interactive(cfg, provider, was_logged_in)
+
+
 def login_status(session_id: str) -> dict:
     with login_lock:
         session = login_sessions.get(session_id)
     if not session:
         return {"ok": False, "error": "Session not found"}
+    if session.status == "pending" and session.detached and not session.was_logged_in:
+        if _should_complete_detached_login(session, load_config()):
+            session.status = "complete"
+            try:
+                _cleanup_detached_login(load_config())
+            except Exception:
+                pass
     return {
         "ok": True,
         "status": session.status,

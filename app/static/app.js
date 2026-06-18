@@ -904,33 +904,30 @@ function wireRerunButtons(list) {
   });
 }
 
-function renderCardAuth(jobId, tunnelName) {
-  const auth = cardAuth[jobId];
-  if (!auth?.code) return "";
-
-  if (auth.status === "complete") {
+function renderRegistrationSection(jobId, tunnelName, tunnelAuth, auth) {
+  if (auth?.code && auth?.status === "pending") {
     return `
-    <div class="card-register card-register-success">
-      <p class="register-status-title">Successfully registered on GitHub</p>
-      <p class="hint tiny">Open Cursor desktop → <strong>Remote-Tunnels</strong> → ${escapeHtml(tunnelName)}</p>
-    </div>`;
-  }
-
-  if (auth.status === "failed") {
-    return `
-    <div class="card-register card-register-failed">
-      <p class="register-status-title">GitHub registration failed</p>
-      <p class="hint tiny">Tap <strong>Register on GitHub</strong> to try again.</p>
-    </div>`;
-  }
-
-  return `
     <div class="card-register">
       <p class="code-label">GitHub device code</p>
       <div class="device-code-sm">${escapeHtml(auth.code)}</div>
       <button type="button" class="btn primary copy-open-card-btn" data-job-id="${jobId}">Copy code &amp; open GitHub</button>
       <p class="hint tiny">Paste the code on GitHub — this page updates when registration completes.</p>
     </div>`;
+  }
+
+  if (auth?.status === "failed") {
+    return "";
+  }
+
+  if (tunnelAuth?.registered === true) {
+    return `
+    <div class="card-register card-register-success">
+      <p class="register-status-title">Registered on GitHub</p>
+      <p class="hint tiny">Open Cursor desktop → <strong>Remote-Tunnels</strong> → ${escapeHtml(tunnelName)}</p>
+    </div>`;
+  }
+
+  return "";
 }
 
 async function refreshRunning() {
@@ -946,7 +943,13 @@ async function refreshRunning() {
       }
       return;
     }
+    const tunnelAuth = res.tunnel_auth || {};
     const running = (res.jobs || []).filter((j) => !j.is_history);
+    if (tunnelAuth.registered === true) {
+      running.forEach((j) => {
+        if (cardAuth[j.job_id]) delete cardAuth[j.job_id];
+      });
+    }
     const stopped = (res.jobs || []).filter((j) => j.is_history);
     syncRunningClocks(res.jobs || []);
     if (!running.length && !stopped.length) {
@@ -961,6 +964,7 @@ async function refreshRunning() {
       const paramsEnc = encodeJobParams(j);
       const auth = cardAuth[j.job_id];
       const registering = auth?.code && auth?.status === "pending";
+      const clusterRegistered = tunnelAuth.registered === true;
       const timerMain = liveRemainingDisplay(j);
       const timerSub =
         j.elapsed && j.time_limit
@@ -985,13 +989,13 @@ async function refreshRunning() {
           ${renderRerunActions(paramsEnc)}
           <button type="button" class="btn secondary copy-name-btn" data-name="${rawName}">Copy tunnel name</button>
           ${
-            !auth?.code || auth?.status === "failed"
-              ? `<button type="button" class="btn secondary register-github-btn" data-job-id="${j.job_id}" data-tunnel="${rawName}"${registering ? " disabled" : ""}>${registering ? "Waiting for GitHub…" : "Register on GitHub"}</button>`
+            !clusterRegistered && !registering
+              ? `<button type="button" class="btn secondary register-github-btn" data-job-id="${j.job_id}" data-tunnel="${rawName}">Register on GitHub</button>`
               : ""
           }
           <button type="button" class="btn danger stop-job-btn" data-job-id="${j.job_id}">Stop</button>
         </div>
-        ${renderCardAuth(j.job_id, j.tunnel_name)}
+        ${renderRegistrationSection(j.job_id, j.tunnel_name, tunnelAuth, auth)}
       </article>`;
     };
 
@@ -1097,7 +1101,10 @@ async function registerOnCard(jobId, tunnelName, btn) {
     btn.textContent = msg;
   });
   try {
-    const res = await api("/api/auth/start", { method: "POST", body: JSON.stringify({ provider: "github" }) });
+    const res = await api("/api/auth/start", {
+      method: "POST",
+      body: JSON.stringify({ provider: "github" }),
+    });
     if (!res.ok) throw new Error(res.error);
     cardAuth[jobId] = {
       code: res.code,
@@ -1132,30 +1139,34 @@ async function copyOpenCardAuth(jobId) {
 
 function startAuthPoll() {
   if (authPollTimer) return;
-  authPollTimer = setInterval(async () => {
-    const sessions = Object.entries(cardAuth).filter(([, a]) => a.session_id && a.status === "pending");
-    if (!sessions.length) {
+  authPollTimer = setInterval(pollAuthSessions, 3000);
+}
+
+async function pollAuthSessions() {
+  const sessions = Object.entries(cardAuth).filter(([, a]) => a.session_id && a.status === "pending");
+  if (!sessions.length) {
+    if (authPollTimer) {
       clearInterval(authPollTimer);
       authPollTimer = null;
-      return;
     }
-    for (const [jobId, auth] of sessions) {
-      try {
-        const res = await api(`/api/auth/status?session_id=${encodeURIComponent(auth.session_id)}`);
-        if (res.status === "complete" || res.status === "failed") {
-          cardAuth[jobId].status = res.status;
-          if (res.status === "complete" && !cardAuth[jobId].notified) {
-            cardAuth[jobId].notified = true;
-            toast(`GitHub registration complete — connect to ${cardAuth[jobId].tunnel_name || "your tunnel"}`);
-          } else if (res.status === "failed" && !cardAuth[jobId].notified) {
-            cardAuth[jobId].notified = true;
-            toast("GitHub registration failed — try again");
-          }
-          refreshRunning();
+    return;
+  }
+  for (const [jobId, auth] of sessions) {
+    try {
+      const res = await api(`/api/auth/status?session_id=${encodeURIComponent(auth.session_id)}`);
+      if (res.status === "complete" || res.status === "failed") {
+        cardAuth[jobId].status = res.status;
+        if (res.status === "complete" && !cardAuth[jobId].notified) {
+          cardAuth[jobId].notified = true;
+          toast(`GitHub registration complete — connect to ${cardAuth[jobId].tunnel_name || "your tunnel"}`);
+        } else if (res.status === "failed" && !cardAuth[jobId].notified) {
+          cardAuth[jobId].notified = true;
+          toast("GitHub registration failed — try again");
         }
-      } catch { /* ignore */ }
-    }
-  }, 3000);
+        refreshRunning();
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 function escapeHtml(s) {
@@ -1208,6 +1219,13 @@ async function dismissStoppedCard(jobId) {
 
 document.getElementById("refresh-btn").addEventListener("click", refreshRunning);
 document.getElementById("disconnect-btn").addEventListener("click", disconnect);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && Object.values(cardAuth).some((a) => a?.status === "pending")) {
+    pollAuthSessions();
+    startAuthPoll();
+  }
+});
 
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);

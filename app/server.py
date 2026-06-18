@@ -290,7 +290,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/auth/start":
             provider = body.get("provider") or load_config()["defaults"].get("auth_provider", "github")
-            json_response(self, 200, start_login(provider, bundle_dir=CLUSTER_BUNDLE))
+            from platform_detect import is_android
+
+            force = bool(body.get("force", True)) if is_android() else False
+            json_response(self, 200, start_login(provider, bundle_dir=CLUSTER_BUNDLE, force=force))
             return
 
         json_response(self, 404, {"ok": False, "error": "Not found"})
